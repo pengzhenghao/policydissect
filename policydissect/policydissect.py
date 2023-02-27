@@ -76,6 +76,7 @@ def draw_origin_and_fft(data, label=None, save_figure=False, n_fft=16, for_neuro
     magnitude = np.abs(ywf)
     phase = np.angle(ywf)
     plot_y = magnitude
+    # ywf = [17, 87]: [Frequency, Time]
 
     if save_figure:
         plt.subplot(3, 1, 1)
@@ -98,6 +99,8 @@ def axis_shift(epi_activation, label="after_tanh"):
         unit_num_per_layer = [len(x[label][0]) for x in layers_per_step]
         for layer in [x[label][0] for x in layers_per_step]:
             # padding dim
+            # If the max layer unit is X and this layer do not have so many units, pad it to X.
+            # TODO: Why?
             if len(layer) != max(unit_num_per_layer):
                 layers.append(np.concatenate([layer, np.zeros([max(unit_num_per_layer) - len(layer)])]))
             else:
@@ -106,12 +109,13 @@ def axis_shift(epi_activation, label="after_tanh"):
         acivation_per_step.append(concat_ret)
     acivation_per_step = np.array(acivation_per_step)
     acivation_per_step = np.moveaxis(acivation_per_step, 0, -1)
+    # After this, get [num layers, max layer unit, time steps]
 
     # Remove padding dims
     ret = []
     for k, unit_num in enumerate(unit_num_per_layer):
         ret.append(acivation_per_step[k][:unit_num][:])
-    return np.array(ret)
+    return np.array(ret)  # Outcome is [# layers, # layer units, # time steps]
 
 
 def analyze_neuron(epi_activation, save_figure=False, n_fft=16, specific_neuron=None):
@@ -204,7 +208,7 @@ def analyze_actions(epi_action, save_figure=False, n_fft=16):
     return action_fft, per_action_dim
 
 
-def do_policy_dissection(collect_episodes, specific_neuron=None, specific_obs=None):
+def do_policy_dissection(collect_episodes, specific_neuron=None, save_figure=False, specific_obs=None):
     n_fft = 32
     # assert not os.path.exists("dissection"), "please save previous result"
     # os.makedirs("dissection")
@@ -214,13 +218,14 @@ def do_policy_dissection(collect_episodes, specific_neuron=None, specific_obs=No
         epi_activation = epi_data["neuron_activation"]
         observations = epi_data["observations"]
 
-        neurons_fft, origin_neuron = analyze_neuron(epi_activation, n_fft=n_fft, specific_neuron=specific_neuron)
+        neurons_fft, origin_neuron = analyze_neuron(epi_activation, save_figure=save_figure, n_fft=n_fft, specific_neuron=specific_neuron)
 
-        obs_fft, origin_obs = analyze_observation(observations, n_fft=n_fft, specific_obs=specific_obs)
+        obs_fft, origin_obs = analyze_observation(observations, n_fft=n_fft, save_figure=save_figure, specific_obs=specific_obs)
 
         ret_obs = get_most_relevant_neuron(
             target_dim_name="obs", neurons_activation_fft=neurons_fft, epi_target_dims_fft=obs_fft
         )["obs_analysis"]
+
         this_epi_frequency_error = ret_obs
         this_epi_frequency_error["seed"] = k
         ckpt_ret[k] = this_epi_frequency_error
